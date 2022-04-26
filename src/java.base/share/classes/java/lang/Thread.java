@@ -25,7 +25,7 @@
 
  /*
  * ===========================================================================
- * (c) Copyright IBM Corp. 2021, 2022 All Rights Reserved
+ * (c) Copyright IBM Corp. 2022, 2022 All Rights Reserved
  * ===========================================================================
  */
 
@@ -3190,6 +3190,7 @@ public class Thread implements Runnable {
     private volatile boolean started;
     // Used by the VM
     private boolean stopCalled;
+    private volatile boolean deadInterrupt;
     // Assigned by the vm
     private static ThreadGroup systemThreadGroup;
     // ThreadGroup where the "main" Thread starts
@@ -3333,7 +3334,7 @@ public class Thread implements Runnable {
         super();
 
         if (vmName == null) {
-            name = nextThreadName();
+            name = genThreadName();
         } else {
             name = vmName;
         }
@@ -3378,8 +3379,6 @@ public class Thread implements Runnable {
             return ((threadStatus != 0) && (eetop == NO_REF));
         }
     }
-
-    private volatile boolean deadInterrupt;
 
     void cleanup() {
         /* Refresh deadInterrupt value so it is accurate when thread reference is removed. */
