@@ -31,6 +31,7 @@
 
 package java.lang;
 
+import java.lang.reflect.Method;
 import java.security.AccessController;
 import java.security.AccessControlContext;
 import java.security.Permission;
@@ -681,7 +682,8 @@ public class Thread implements Runnable {
                 g = parent.getThreadGroup();
             }
         }
-
+        initialize(false, g, parent, acc, characteristics);
+/*
         // permission checks when creating a child Thread
         if (!attached && security != null) {
             security.checkAccess(g);
@@ -695,7 +697,9 @@ public class Thread implements Runnable {
         } else {
             this.tid = ThreadIdentifiers.next();
         }
+*/
         this.name = name;
+/*
         if (acc != null) {
             this.inheritedAccessControlContext = acc;
         } else {
@@ -727,7 +731,7 @@ public class Thread implements Runnable {
                 this.contextClassLoader = ClassLoader.getSystemClassLoader();
             }
         }
-
+*/
         int priority;
         boolean daemon;
         if (attached) {
@@ -3197,41 +3201,6 @@ public class Thread implements Runnable {
     // Symbolic constant, no threadRef assigned or already cleaned up
     static final long NO_REF = 0;
 
-    /*
-     * Called after everything else is initialized.
-     */
-    void completeInitialization() {
-        // Get the java.system.class.loader
-        contextClassLoader = ClassLoader.getSystemClassLoader();
-        jdk.internal.misc.VM.initLevel(4);
-        System.startSNMPAgent();
-
-        /* Although file.encoding is used to set the default Charset, some Charset's are not available
-         * in the java.base module and so are not used at startup. There are additional Charset's in the
-         * jdk.charsets module, which is only loaded later. This means the default Charset may not be the
-         * same as file.encoding. Now that all modules and Charset's are available, check if the desired
-         * encodings can be used for System.err and System.out.
-         */
-        Properties props = System.internalGetProperties();
-        // If the sun.stderr.encoding was already set in System, don't change the encoding
-        if (!System.hasSetErrEncoding()) {
-            Charset stderrCharset = System.getCharset(props.getProperty("sun.stderr.encoding"), true);
-            if (stderrCharset != null) {
-                System.err.flush();
-                System.setErr(System.createConsole(FileDescriptor.err, stderrCharset));
-            }
-        }
-
-        // If the sun.stdout.encoding was already set in System, don't change the encoding
-        if (!System.hasSetOutEncoding()) {
-            Charset stdoutCharset = System.getCharset(props.getProperty("sun.stdout.encoding"), true);
-            if (stdoutCharset != null) {
-                System.out.flush();
-                System.setOut(System.createConsole(FileDescriptor.out, stdoutCharset));
-            }
-        }
-    }
-
     void uncaughtException(Throwable e) {
         UncaughtExceptionHandler handler = getUncaughtExceptionHandler();
         if (handler != null) {
@@ -3249,16 +3218,39 @@ public class Thread implements Runnable {
      * @param acc The AccessControlContext. If null, use the current context
      * @param inheritThreadLocals A boolean indicating whether to inherit initial values for inheritable thread-local variables
      */
-    private void initialize(boolean booting, ThreadGroup threadGroup, Thread parentThread, AccessControlContext acc, boolean inheritThreadLocals) {
+    private void initialize(boolean booting, ThreadGroup threadGroup, Thread parentThread, AccessControlContext acc, int inheritThreadLocals) {
         tid = ThreadIdentifiers.next();
         if (booting) {
             System.afterClinitInitialization();
         }
-
+/*
+        if ((characteristics & NO_THREAD_LOCALS) != 0) {
+            this.threadLocals = ThreadLocal.ThreadLocalMap.NOT_SUPPORTED;
+            this.inheritableThreadLocals = ThreadLocal.ThreadLocalMap.NOT_SUPPORTED;
+            this.contextClassLoader = Constants.NOT_SUPPORTED_CLASSLOADER;
+        } else if ((characteristics & NO_INHERIT_THREAD_LOCALS) == 0) {
+            ThreadLocal.ThreadLocalMap parentMap = parent.inheritableThreadLocals;
+            if (parentMap != null
+                    && parentMap != ThreadLocal.ThreadLocalMap.NOT_SUPPORTED
+                    && parentMap.size() > 0) {
+                this.inheritableThreadLocals = ThreadLocal.createInheritedMap(parentMap);
+            }
+            ClassLoader parentLoader = contextClassLoader(parent);
+            if (VM.isBooted() && !isSupportedClassLoader(parentLoader)) {
+                // parent does not support thread locals so no CCL to inherit
+                this.contextClassLoader = ClassLoader.getSystemClassLoader();
+            } else {
+                this.contextClassLoader = parentLoader;
+            }
+        } else if (VM.isBooted()) {
+            // default CCL to the system class loader when not inheriting
+            this.contextClassLoader = ClassLoader.getSystemClassLoader();
+        }
+*/
         // initialize the thread local storage before making other calls
         if (parentThread != null) {
             // Non-main thread
-            if (inheritThreadLocals && (parentThread.inheritableThreadLocals != null)) {
+            if ((inheritThreadLocals == 0) && (parentThread.inheritableThreadLocals != null)) {
                 inheritableThreadLocals = ThreadLocal.createInheritedMap(parentThread.inheritableThreadLocals);
             }
 
@@ -3338,9 +3330,6 @@ public class Thread implements Runnable {
             name = vmName;
         }
 
-
-
-        ThreadGroup threadGroup = null;
         boolean booting = false;
         if (mainGroup == null) {
             // only occurs during bootstrap
@@ -3349,7 +3338,7 @@ public class Thread implements Runnable {
         } else {
             setNameImpl(eetop, name);
         }
-        threadGroup = (vmThreadGroup == null) ? mainGroup : (ThreadGroup)vmThreadGroup;
+        ThreadGroup threadGroup = (vmThreadGroup == null) ? mainGroup : (ThreadGroup)vmThreadGroup;
 
         // If we called setPriority(), it would have to be after setting the ThreadGroup (further down),
         // because of the checkAccess() call (which requires the ThreadGroup set). However, for the main
@@ -3357,7 +3346,7 @@ public class Thread implements Runnable {
         this.holder = new FieldHolder(threadGroup, null, 0, vmPriority, vmIsDaemon);
 
         // no parent Thread
-        initialize(booting, threadGroup, null, null, true);
+        initialize(booting, threadGroup, null, null, 0);
 
         if (booting) {
             /* JDK15+ native method binding uses java.lang.ClassLoader.findNative():bootstrapClassLoader.nativelibs.find(entryName)
@@ -3380,15 +3369,9 @@ public class Thread implements Runnable {
     }
 
     void cleanup() {
-        /* Refresh deadInterrupt value so it is accurate when thread reference is removed. */
-        deadInterrupt = interrupted();
-        if ((threadLocals != null) && TerminatingThreadLocal.REGISTRY.isPresent()) {
-            TerminatingThreadLocal.threadTerminated();
-        }
-        holder = null;
-        inheritedAccessControlContext = null;
-        threadLocals = null;
-        inheritableThreadLocals = null;
+        /* Refresh interrupted value so it is accurate when thread reference is removed. */
+        interrupted = interrupted();
+        exit();
         synchronized (interruptLock) {
             // So that isAlive() can work
             eetop = Thread.NO_REF;
@@ -3396,35 +3379,8 @@ public class Thread implements Runnable {
     }
 
     Thread(Runnable runnable, String threadName, boolean isSystemThreadGroup, boolean inheritThreadLocals, boolean isDaemon, ClassLoader contextClassLoader) {
-        this(isSystemThreadGroup ? systemThreadGroup : null, runnable, threadName, null, inheritThreadLocals);
+        this(isSystemThreadGroup ? systemThreadGroup : null, threadName, (inheritThreadLocals ? 0 : NO_INHERIT_THREAD_LOCALS), runnable, 0, null);
         daemon(isDaemon);
         this.contextClassLoader = contextClassLoader;
-    }
-
-    private Thread(ThreadGroup group, Runnable runnable, String threadName, AccessControlContext acc, boolean inheritThreadLocals) {
-        super();
-        if (threadName == null) {
-            throw new NullPointerException();
-        }
-        // We avoid the public API 'setName', since it does redundant work (checkAccess)
-        this.name = threadName;
-        Thread currentThread = currentThread();
-
-        if (group == null) {
-            @SuppressWarnings("removal")
-            SecurityManager currentManager = System.getSecurityManager();
-            // if there is a security manager...
-            if (currentManager != null) {
-                // Ask SecurityManager for ThreadGroup
-                group = currentManager.getThreadGroup();
-            }
-        }
-        if (group == null) {
-            // Same group as Thread that created us
-            group = currentThread.getThreadGroup();
-        }
-
-        this.holder = new FieldHolder(group, runnable, 0, currentThread.getPriority(), currentThread.isDaemon());
-        initialize(false, group, currentThread, acc, inheritThreadLocals);
     }
 }
