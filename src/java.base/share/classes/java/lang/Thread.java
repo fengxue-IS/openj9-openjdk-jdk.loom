@@ -691,13 +691,13 @@ public class Thread implements Runnable {
                 security.checkPermission(SecurityConstants.SUBCLASS_IMPLEMENTATION_PERMISSION);
             }
         }
-
+*/
         if (attached && VM.initLevel() < 1) {
             this.tid = 1;  // primordial thread
         } else {
             this.tid = ThreadIdentifiers.next();
         }
-*/
+
         this.name = name;
 /*
         if (acc != null) {
@@ -3134,7 +3134,7 @@ public class Thread implements Runnable {
                     stopCalled = true;
                 } else {
                     /* thread was started so do the full stop */
-                    stopImpl(o);
+                    stopImpl((Throwable)o);
                 }
             } else {
                 throw new NullPointerException();
@@ -3219,7 +3219,6 @@ public class Thread implements Runnable {
      * @param inheritThreadLocals A boolean indicating whether to inherit initial values for inheritable thread-local variables
      */
     private void initialize(boolean booting, ThreadGroup threadGroup, Thread parentThread, AccessControlContext acc, int inheritThreadLocals) {
-        tid = ThreadIdentifiers.next();
         if (booting) {
             System.afterClinitInitialization();
         }
@@ -3344,6 +3343,7 @@ public class Thread implements Runnable {
         // because of the checkAccess() call (which requires the ThreadGroup set). However, for the main
         // Thread or JNI-C attached Threads we just trust the value the VM is passing us, and just assign.
         this.holder = new FieldHolder(threadGroup, null, 0, vmPriority, vmIsDaemon);
+        this.tid = ThreadIdentifiers.next();
 
         // no parent Thread
         initialize(booting, threadGroup, null, null, 0);
