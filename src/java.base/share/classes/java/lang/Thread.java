@@ -3112,7 +3112,7 @@ public class Thread implements Runnable {
 
     private void setPriority0(int newPriority) {
         synchronized (interruptLock) {
-            if ((threadStatus != 0) && (NO_REF != eetop)) {
+            if ((holder.threadStatus != 0) && (NO_REF != eetop)) {
                 setPriorityNoVMAccessImpl(eetop, newPriority);
             }
         }
@@ -3121,7 +3121,7 @@ public class Thread implements Runnable {
     private void stop0(Object o) {
         synchronized (interruptLock) {
             if (o != null) {
-                if (threadStatus == 0) {
+                if (holder.threadStatus == 0) {
                     /* [PR CMVC 179978] Java7:JCK:java_lang.Thread fails in all platform */
                     /*
                         * If the thread has not yet been simply store the fact that stop has been called,
@@ -3164,7 +3164,7 @@ public class Thread implements Runnable {
 
     private void setNativeName(String name) {
         synchronized (interruptLock) {
-            if ((threadStatus != 0) && (eetop != NO_REF)) {
+            if ((holder.threadStatus != 0) && (eetop != NO_REF)) {
                 setNameImpl(eetop, name);
             }
         }
@@ -3375,7 +3375,7 @@ public class Thread implements Runnable {
     private boolean isDead() {
         // Has already started, is not alive anymore, and has been removed from the ThreadGroup
         synchronized (interruptLock) {
-            return ((threadStatus != 0) && (eetop == NO_REF));
+            return ((holder.threadStatus != 0) && (eetop == NO_REF));
         }
     }
 
