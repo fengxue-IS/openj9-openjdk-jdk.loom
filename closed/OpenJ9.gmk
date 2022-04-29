@@ -471,6 +471,12 @@ run-preprocessors-j9 : $(OUTPUTDIR)/vm/cmake.stamp
 
 else # OPENJ9_ENABLE_CMAKE
 
+ifeq (true,$(OPENJ9_ENABLE_LOOM_SUPPORT))
+LOOM_SUPPORT=ON
+else # OPENJ9_ENABLE_LOOM_SUPPORT
+LOOM_SUPPORT=OFF
+endif
+
 run-preprocessors-j9 : stage-j9
 	@$(ECHO) Running OpenJ9 preprocessors with OPENJ9_BUILDSPEC: $(OPENJ9_BUILDSPEC)
 	+BOOT_JDK=$(BOOT_JDK) $(EXPORT_COMPILER_ENV_VARS) OPENJDK_VERSION_NUMBER_FOUR_POSITIONS=$(VERSION_NUMBER_FOUR_POSITIONS) \
@@ -486,6 +492,7 @@ run-preprocessors-j9 : stage-j9
 			SPEC=$(OPENJ9_BUILDSPEC) \
 			UMA_OPTIONS_EXTRA="-buildDate $(shell date +'%Y%m%d')" \
 			VERSION_MAJOR=$(VERSION_FEATURE) \
+			LOOM_SUPPORT=$(LOOM_SUPPORT) \
 			tools
 
 endif # OPENJ9_ENABLE_CMAKE
