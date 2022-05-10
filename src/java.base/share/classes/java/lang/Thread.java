@@ -1540,7 +1540,7 @@ public class Thread implements Runnable {
     public void start() {
         synchronized (this) {
             // zero status corresponds to state "NEW".
-            if (holder.threadStatus != 0)
+            if (started && (eetop != NO_REF))
                 throw new IllegalThreadStateException();
             start0();
         }
@@ -1554,7 +1554,7 @@ public class Thread implements Runnable {
     void start(ThreadContainer container) {
         synchronized (this) {
             // zero status corresponds to state "NEW".
-            if (holder.threadStatus != 0)
+            if (started && (eetop != NO_REF))
                 throw new IllegalThreadStateException();
 
             boolean started = false;
@@ -1722,7 +1722,7 @@ public class Thread implements Runnable {
 
         // A zero status value corresponds to "NEW", it can't change to
         // not-NEW because we hold the lock.
-        if (holder.threadStatus != 0) {
+        if (started && (eetop != NO_REF)) {
             resume(); // Wake up thread if it was suspended; no-op otherwise
         }
 
@@ -2868,7 +2868,15 @@ public class Thread implements Runnable {
      * so can be overridden to run arbitrary code.
      */
     State threadState() {
-        return jdk.internal.misc.VM.toThreadState(holder.threadStatus);
+        synchronized (interruptLock) {
+            if (eetop == NO_REF) {
+                if (isDead()) {
+                    return State.TERMINATED;
+                }
+                return State.NEW;
+            }
+            return State.values()[getStateImpl(eetop)];
+        }
     }
 
     /**
@@ -3116,7 +3124,7 @@ public class Thread implements Runnable {
 
     private void setPriority0(int newPriority) {
         synchronized (interruptLock) {
-            if ((holder.threadStatus != 0) && (NO_REF != eetop)) {
+            if (started && (NO_REF != eetop)) {
                 setPriorityNoVMAccessImpl(eetop, newPriority);
             }
         }
@@ -3125,7 +3133,7 @@ public class Thread implements Runnable {
     private void stop0(Object o) {
         synchronized (interruptLock) {
             if (o != null) {
-                if (holder.threadStatus == 0) {
+                if (started) {
                     /* [PR CMVC 179978] Java7:JCK:java_lang.Thread fails in all platform */
                     /*
                         * If the thread has not yet been simply store the fact that stop has been called,
@@ -3168,7 +3176,7 @@ public class Thread implements Runnable {
 
     private void setNativeName(String name) {
         synchronized (interruptLock) {
-            if ((holder.threadStatus != 0) && (eetop != NO_REF)) {
+            if (started && (eetop != NO_REF)) {
                 setNameImpl(eetop, name);
             }
         }
@@ -3188,6 +3196,7 @@ public class Thread implements Runnable {
     private native void interruptImpl();
     private static native boolean interruptedImpl();
     private native void setNameImpl(long threadRef, String threadName);
+    private native int getStateImpl(long eetop);
 
     // If !isAlive(), tells if Thread died already or hasn't even started
     private volatile boolean started;
@@ -3364,7 +3373,7 @@ public class Thread implements Runnable {
     private boolean isDead() {
         // Has already started, is not alive anymore, and has been removed from the ThreadGroup
         synchronized (interruptLock) {
-            return ((holder.threadStatus != 0) && (eetop == NO_REF));
+            return (started && (eetop == NO_REF));
         }
     }
 
