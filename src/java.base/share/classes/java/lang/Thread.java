@@ -3227,41 +3227,36 @@ public class Thread implements Runnable {
      * @param acc The AccessControlContext. If null, use the current context
      * @param inheritThreadLocals A boolean indicating whether to inherit initial values for inheritable thread-local variables
      */
-    private void initialize(boolean booting, ThreadGroup threadGroup, Thread parentThread, AccessControlContext acc, int inheritThreadLocals) {
+    private void initialize(boolean booting, ThreadGroup threadGroup, Thread parentThread, AccessControlContext acc, int characteristics) {
         if (booting) {
             System.afterClinitInitialization();
+            // no parent: main thread, or one attached through JNI-C
+            if (parentThread == null) {
+                // Preload and initialize the JITHelpers class
+                try {
+                    Class.forName("com.ibm.jit.JITHelpers");
+                } catch(ClassNotFoundException e) {
+                    // Continue silently if the class can't be loaded and initialized for some reason,
+                    // The JIT will tolerate this.
+                }
+
+                // Explicitly initialize ClassLoaders, so ClassLoader methods (such as
+                // ClassLoader.callerClassLoader) can be used before System is initialized
+                ClassLoader.initializeClassLoaders();
+            }
         }
-/*
+
         if ((characteristics & NO_THREAD_LOCALS) != 0) {
             this.threadLocals = ThreadLocal.ThreadLocalMap.NOT_SUPPORTED;
             this.inheritableThreadLocals = ThreadLocal.ThreadLocalMap.NOT_SUPPORTED;
             this.contextClassLoader = Constants.NOT_SUPPORTED_CLASSLOADER;
-        } else if ((characteristics & NO_INHERIT_THREAD_LOCALS) == 0) {
-            ThreadLocal.ThreadLocalMap parentMap = parent.inheritableThreadLocals;
+        } else if (((characteristics & NO_INHERIT_THREAD_LOCALS) == 0) && (parentThread != null)) {
+            ThreadLocal.ThreadLocalMap parentMap = parentThread.inheritableThreadLocals;
             if (parentMap != null
                     && parentMap != ThreadLocal.ThreadLocalMap.NOT_SUPPORTED
                     && parentMap.size() > 0) {
                 this.inheritableThreadLocals = ThreadLocal.createInheritedMap(parentMap);
             }
-            ClassLoader parentLoader = contextClassLoader(parent);
-            if (VM.isBooted() && !isSupportedClassLoader(parentLoader)) {
-                // parent does not support thread locals so no CCL to inherit
-                this.contextClassLoader = ClassLoader.getSystemClassLoader();
-            } else {
-                this.contextClassLoader = parentLoader;
-            }
-        } else if (VM.isBooted()) {
-            // default CCL to the system class loader when not inheriting
-            this.contextClassLoader = ClassLoader.getSystemClassLoader();
-        }
-*/
-        // initialize the thread local storage before making other calls
-        if (parentThread != null) {
-            // Non-main thread
-            if ((inheritThreadLocals == 0) && (parentThread.inheritableThreadLocals != null)) {
-                inheritableThreadLocals = ThreadLocal.createInheritedMap(parentThread.inheritableThreadLocals);
-            }
-
             @SuppressWarnings("removal")
             final SecurityManager sm = System.getSecurityManager();
             final Class<?> implClass = getClass();
@@ -3291,30 +3286,22 @@ public class Thread implements Runnable {
                     sm.checkPermission(com.ibm.oti.util.RuntimePermissions.permissionEnableContextClassLoaderOverride);
                 }
             }
-            // By default a Thread "inherits" the context ClassLoader from its creator
-            contextClassLoader = parentThread.getContextClassLoader();
-        } else {
-            // no parent: main thread, or one attached through JNI-C
-            if (booting) {
-                // Preload and initialize the JITHelpers class
-                try {
-                    Class.forName("com.ibm.jit.JITHelpers");
-                } catch(ClassNotFoundException e) {
-                    // Continue silently if the class can't be loaded and initialized for some reason,
-                    // The JIT will tolerate this.
-                }
 
-                // Explicitly initialize ClassLoaders, so ClassLoader methods (such as
-                // ClassLoader.callerClassLoader) can be used before System is initialized
-                ClassLoader.initializeClassLoaders();
+            ClassLoader parentLoader = contextClassLoader(parentThread);
+            if (VM.isBooted() && !isSupportedClassLoader(parentLoader)) {
+                // parent does not support thread locals so no CCL to inherit
+                this.contextClassLoader = ClassLoader.getSystemClassLoader();
+            } else {
+                this.contextClassLoader = parentLoader;
             }
-            // Just set the context class loader
-            contextClassLoader = ClassLoader.getSystemClassLoader();
+        } else if (VM.isBooted()) {
+            // default CCL to the system class loader when not inheriting
+            this.contextClassLoader = ClassLoader.getSystemClassLoader();
         }
 
         threadGroup.checkAccess();
 
-        inheritedAccessControlContext = (acc == null) ? AccessController.getContext() : acc;
+        this.inheritedAccessControlContext = (acc == null) ? AccessController.getContext() : acc;
     }
 
     /**
